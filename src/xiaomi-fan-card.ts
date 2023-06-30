@@ -430,6 +430,12 @@ export class FanXiaomiCard extends LitElement {
         this.supportedAttributes.naturalSpeed = false;
         this.supportedAttributes.timer = false;
       }
+      //temp solution for Xiaomi Smart Standing Fan 2 Lite fan speed until proper fan support is added in the upstream
+      if (["dmaker.fan.1c"].includes(attrs["model"])) {
+        this.supportedAttributes.speedLevels = 3;
+        this.supportedAttributes.angle = false;
+        this.supportedAttributes.rotationAngle = false;
+      }
       if (["leshow.fan.ss4"].includes(attrs["model"])) {
         this.supportedAttributes.angle = false;
         this.supportedAttributes.childLock = false;
