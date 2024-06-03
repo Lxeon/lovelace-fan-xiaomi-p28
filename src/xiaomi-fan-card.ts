@@ -15,20 +15,25 @@ import { FanXiaomiCardConfig, defaultConfig } from "./config";
 });
 
 type SupportedAttributes = {
-  angle: boolean;
+  verticalAngle: boolean;
+  rotationVerticalAngle: boolean;
+  supportedVerticalAngles: number[];
+  horizontalAngle: boolean;
   childLock: boolean;
   timer: boolean;
-  rotationAngle: boolean;
+  rotationHorizontalAngle: boolean;
   speedLevels: number;
   naturalSpeed: boolean;
-  supportedAngles: number[];
+  supportedHorizontalAngles: number[];
   sleepMode: boolean;
+  smartMode: boolean;
   led: boolean;
   speedIncreaseDecreaseButtons: boolean;
 };
 
 type DeviceEntities = {
-  angle?: string;
+  horizontalAngle?: string;
+  verticalAngle?: string;
   timer?: string;
   childLock?: string;
   ledNumber?: string;
@@ -40,17 +45,21 @@ type DeviceEntities = {
 };
 
 const entityFilters: { [name in keyof Required<DeviceEntities>]: { prefix: string; suffix: string } } = {
-  angle: {
+  horizontalAngle: {
+    prefix: "number.",
+    suffix: "_oscillation_angle",
+  },
+  verticalAngle: {
     prefix: "number.",
     suffix: "_oscillation_angle",
   },
   childLock: {
     prefix: "switch.",
-    suffix: "_child_lock",
+    suffix: "_physical_control_locked",
   },
   timer: {
     prefix: "number.",
-    suffix: "_delay_off_countdown",
+    suffix: "_off_delay_time",
   },
   ledNumber: {
     prefix: "number.",
@@ -92,7 +101,7 @@ function createFanBladeHtml(): HTMLTemplateResult[] {
 function delayOffCountdownText(delay_off_countdown: number, model: string): string {
   let timer_display = "Off";
   if (delay_off_countdown) {
-    const total_mins = ["dmaker.fan.p15"].includes(model) ? delay_off_countdown / 60 : delay_off_countdown;
+    const total_mins = delay_off_countdown;
 
     const hours = Math.floor(total_mins / 60);
     const mins = Math.floor(total_mins % 60);
@@ -131,13 +140,13 @@ export class FanXiaomiCard extends LitElement {
   @state() private deviceEntities: DeviceEntities = {};
 
   @state() private supportedAttributes: SupportedAttributes = {
-    angle: true,
+    horizontalAngle: true,
     childLock: true,
     timer: true,
-    rotationAngle: true,
+    rotationHorizontalAngle: true,
     speedLevels: 4,
     naturalSpeed: true,
-    supportedAngles: [30, 60, 90, 120],
+    supportedHorizontalAngles: [30, 60, 90, 120],
     sleepMode: false,
     led: false,
     speedIncreaseDecreaseButtons: false,
@@ -163,86 +172,79 @@ export class FanXiaomiCard extends LitElement {
   }
 
   private getModel() {
-    if (this.config.platform === "default") {
-      return null;
-    }
     return this.hass.states[this.config.entity].attributes["model"];
   }
 
   private setChildLock(on) {
-    if (this.deviceEntities.childLock) {
-      this.hass.callService("switch", on ? "turn_on" : "turn_off", {
-        entity_id: this.deviceEntities.childLock,
-      });
-    } else {
-      this.hass.callService(this.config.platform, on ? "fan_set_child_lock_on" : "fan_set_child_lock_off");
-    }
-  }
-
-  private getChildLock() {
-    if (this.deviceEntities.childLock) {
-      return this.hass.states[this.deviceEntities.childLock].state === "on";
-    }
-    return this.hass.states[this.config.entity].attributes["child_lock"];
-  }
-
-  private setTimer(value: number) {
-    if (this.deviceEntities.timer) {
-      this.hass.callService("number", "set_value", {
-        entity_id: this.deviceEntities.timer,
-        value: value,
-      });
-    } else {
-      this.hass.callService(this.config.platform, "fan_set_delay_off", {
-        entity_id: this.config.entity,
-        delay_off_countdown: value,
-      });
-    }
-  }
-
-  private getTimer(): number {
-    if (this.deviceEntities.timer) {
-      let minutesRemaining = Number(this.hass.states[this.deviceEntities.timer].state);
-      const max = this.hass.states[this.deviceEntities.timer].attributes["max"];
-      if (max && minutesRemaining > max) {
-        // Work around a bug where state is reported in seconds despite the unit being minutes
-        minutesRemaining = Math.ceil(minutesRemaining / 60.0);
-      }
-      return minutesRemaining;
-    }
-    return Number(this.hass.states[this.config.entity].attributes["delay_off_countdown"]);
-  }
-
-  private setAngle(value) {
-    if (this.deviceEntities.angle) {
-      this.hass.callService("number", "set_value", {
-        entity_id: this.deviceEntities.angle,
-        value: value,
-      });
-    } else {
-      this.hass.callService(this.config.platform, "fan_set_oscillation_angle", {
-        entity_id: this.config.entity,
-        angle: value,
-      });
-    }
-  }
-
-  private getAngle() {
-    if (this.deviceEntities.angle) {
-      return Number(this.hass.states[this.deviceEntities.angle].state);
-    }
-    return this.hass.states[this.config.entity].attributes["angle"];
-  }
-
-  private setOscillation(on) {
-    this.hass.callService("fan", "oscillate", {
+    this.hass.callService("xiaomi_miot", "set_property", {
       entity_id: this.config.entity,
-      oscillating: on,
+      field: "physical_controls_locked",
+      value: on
     });
   }
 
-  private getOscillation() {
-    return this.hass.states[this.config.entity].attributes["oscillating"];
+  private getChildLock() {
+    return this.hass.states[this.config.entity].attributes["physical_controls_locked"];
+  }
+
+  private setTimer(value: number) {
+    this.hass.callService("xiaomi_miot", "set_property", {
+      entity_id: this.config.entity,
+      field: "off_delay_time",
+      value: value
+    });
+  }
+
+  private getTimer(): number {
+    return Number(this.hass.states[this.config.entity].attributes["off_delay_time"]);
+  }
+
+  private setHorizontalAngle(value) {
+    this.hass.callService("xiaomi_miot", "set_property", {
+      entity_id: this.config.entity,
+      field: "horizontal_swing_included_angle-2-5",
+      value: value
+    });
+  }
+
+  private setVerticalAngle(value) {
+    this.hass.callService("xiaomi_miot", "set_property", {
+      entity_id: this.config.entity,
+      field: "vertical_swing_included_angle-2-8",
+      value: value
+    });
+  }
+
+  private getHorizontalAngle() {
+    return this.hass.states[this.config.entity].attributes["horizontal_swing_included_angle-2-5"];
+  }
+
+  private getVerticalAngle() {
+    return this.hass.states[this.config.entity].attributes["vertical_swing_included_angle-2-8"];
+  }
+
+  private setHorizontalOscillation(on) {
+    this.hass.callService("xiaomi_miot", "set_property", {
+      entity_id: this.config.entity,
+      field: "fan.horizontal_swing",
+      value: on
+    });
+  }
+  
+  private setVerticalOscillation(on) {
+    this.hass.callService("xiaomi_miot", "set_property", {
+      entity_id: this.config.entity,
+      field: "fan.vertical_swing",
+      value: on
+    });
+  }
+
+  private getHorizontalOscillation() {
+    return this.hass.states[this.config.entity].attributes["fan.horizontal_swing"];
+  }
+
+  private getVerticalOscillation() {
+    return this.hass.states[this.config.entity].attributes["fan.vertical_swing"];
   }
 
   private getSpeedPercentage(): number {
@@ -255,93 +257,62 @@ export class FanXiaomiCard extends LitElement {
   }
 
   private setPresetMode(value) {
-    if (this.config.platform === "default") {
-      this.hass.callService("fan", "set_preset_mode", {
+    if (value === "Natural Wind") {
+      this.hass.callService("xiaomi_miot", "set_property", {
         entity_id: this.config.entity,
-        preset_mode: value,
+        field: "fan.mode",
+        value: "1"
       });
-    } else {
-      if (value === "Nature") {
-        this.hass.callService(this.config.platform, "fan_set_natural_mode_on", {
-          entity_id: this.config.entity,
-        });
-      } else {
-        this.hass.callService(this.config.platform, "fan_set_natural_mode_off", {
-          entity_id: this.config.entity,
-        });
-      }
+    } else if (value === "Smart") {
+      this.hass.callService("xiaomi_miot", "set_property", {
+        entity_id: this.config.entity,
+        field: "fan.mode",
+        value: "2"
+      });
+    } else if (value === "Sleep") {
+      this.hass.callService("xiaomi_miot", "set_property", {
+        entity_id: this.config.entity,
+        field: "fan.mode",
+        value: "3"
+      });
+    } else if (value === "Straight Wind"){
+      this.hass.callService("xiaomi_miot", "set_property", {
+        entity_id: this.config.entity,
+        field: "fan.mode",
+        value: "0"
+      });
     }
   }
 
   /**
    * @returns The fan's preset (nature/normal) mode as a lowercase string.
    */
-  private getPresetMode(): "nature" | "normal" | undefined {
-    const attrs = this.hass.states[this.config.entity].attributes;
-    if (this.config.platform === "default") {
-      return attrs["preset_mode"]?.toLowerCase();
-    }
-    return attrs["mode"]?.toLowerCase();
+  private getPresetMode(): "Straight Wind" | "Natural Wind" | "Smart" | "Sleep" | undefined {
+    return this.hass.states[this.config.entity].attributes["preset_mode"];
   }
 
   private setLed(on: boolean) {
-    if (this.deviceEntities.ledNumber) {
-      this.hass.callService("number", "set_value", {
-        entity_id: this.deviceEntities.ledNumber,
-        value: on ? 100 : 0,
-      });
-    } else if (this.deviceEntities.ledSelect) {
-      this.hass.callService("select", "select_option", {
-        entity_id: this.deviceEntities.ledSelect,
-        option: on ? "bright" : "off",
-      });
-    } else if (this.deviceEntities.ledSwitch) {
-      if (on) {
-        this.hass.callService("switch", "turn_on", {
-          entity_id: this.deviceEntities.ledSwitch,
-        });
-      } else {
-        this.hass.callService("switch", "turn_off", {
-          entity_id: this.deviceEntities.ledSwitch,
-        });
-      }
-    } else {
-      this.hass.callService(this.config.platform, on ? "fan_set_led_on" : "fan_set_led_off", {
-        entity_id: this.config.entity,
-      });
-    }
+    this.hass.callService("xiaomi_miot", "set_property", {
+      entity_id: this.config.entity,
+      field: "indicator_light.on",
+      value: on
+    });
   }
 
   private getLed() {
-    if (this.deviceEntities.ledNumber) {
-      return Number(this.hass.states[this.deviceEntities.ledNumber].state) > 0;
-    } else if (this.deviceEntities.ledSelect) {
-      return this.hass.states[this.deviceEntities.ledSelect].state !== "off";
-    } else if (this.deviceEntities.ledSwitch) {
-      return this.hass.states[this.deviceEntities.ledSwitch].state === "on";
-    }
-    return this.hass.states[this.config.entity].attributes["led_brightness"] < 2;
+    return this.hass.states[this.config.entity].attributes["indicator_light.on"];
   }
 
   private getTemperature() {
-    if (this.deviceEntities.temperature) {
-      return this.hass.states[this.deviceEntities.temperature].state;
-    }
-    return undefined;
+    return this.hass.states[this.config.entity].attributes["environment.temperature"];
   }
 
   private getHumidity() {
-    if (this.deviceEntities.humidity) {
-      return this.hass.states[this.deviceEntities.humidity].state;
-    }
-    return undefined;
+    return this.hass.states[this.config.entity].attributes["environment.relative_humidity"]
   }
 
   private getPowerSupply() {
-    if (this.deviceEntities.powerSupply) {
-      return this.hass.states[this.deviceEntities.powerSupply].state === "on";
-    }
-    return undefined;
+    return this.hass.states[this.config.entity].attributes["fan.on"];
   }
 
   private async findDeviceEntities(): Promise<DeviceEntities> {
@@ -376,15 +347,15 @@ export class FanXiaomiCard extends LitElement {
   }
 
   private checkFanAuxFeatures() {
-    if (this.deviceEntities.angle) {
-      this.supportedAttributes.angle = true;
-      const attr = this.hass.states[this.deviceEntities.angle].attributes;
+    if (this.deviceEntities.horizontalAngle) {
+      this.supportedAttributes.horizontalAngle = true;
+      const attr = this.hass.states[this.deviceEntities.horizontalAngle].attributes;
       if (attr.min && attr.max && attr.step) {
         const angles: number[] = [];
         for (let a = attr.min as number; a <= attr.max; a += attr.step) {
           angles.push(a);
         }
-        this.supportedAttributes.supportedAngles = angles;
+        this.supportedAttributes.supportedHorizontalAngles = angles;
       }
     }
 
@@ -402,54 +373,20 @@ export class FanXiaomiCard extends LitElement {
   }
 
   private async configureAsync() {
-    if (this.config.platform === "default") {
-      const fanEntity = this.hass.states[this.config.entity];
-      if (!fanEntity) {
-        return;
-      }
-
-      this.deviceEntities = await this.findDeviceEntities();
-      this.checkFanFeatures(fanEntity.attributes);
-      this.checkFanAuxFeatures();
-    } else {
-      const state = this.hass.states[this.config.entity];
-      const attrs = state.attributes;
-
-      if (["dmaker.fan.p5", "dmaker.fan.p15", "dmaker.fan.p18", "dmaker.fan.p33"].includes(attrs["model"])) {
-        this.supportedAttributes.supportedAngles = [30, 60, 90, 120, 140];
-        //this.supportedAttributes.led = true;
-      }
-
-      //temp solution for FA1 fan until proper fan support is added in the upstream
-      if (["zhimi.fan.fa1"].includes(attrs["model"])) {
-        this.supportedAttributes.speedIncreaseDecreaseButtons = true;
-        this.supportedAttributes.angle = false;
-        this.supportedAttributes.childLock = false;
-        this.supportedAttributes.rotationAngle = false;
-        this.supportedAttributes.speedLevels = 3;
-        this.supportedAttributes.naturalSpeed = false;
-        this.supportedAttributes.timer = false;
-      }
-      //temp solution for Xiaomi Smart Standing Fan 2 Lite fan speed until proper fan support is added in the upstream
-      if (["dmaker.fan.1c"].includes(attrs["model"])) {
-        this.supportedAttributes.speedLevels = 3;
-        this.supportedAttributes.angle = false;
-        this.supportedAttributes.rotationAngle = false;
-      }
-      if (["leshow.fan.ss4"].includes(attrs["model"])) {
-        this.supportedAttributes.angle = false;
-        this.supportedAttributes.childLock = false;
-        this.supportedAttributes.rotationAngle = false;
-        this.supportedAttributes.naturalSpeed = false;
-        this.supportedAttributes.sleepMode = true;
-      }
-
-      //trick to support of 'any' fan
-      if (this.config.force_sleep_mode_support) {
-        this.supportedAttributes.sleepMode = true;
-      }
-    }
-
+    this.supportedAttributes.childLock = true;
+    this.supportedAttributes.timer = true;
+    this.supportedAttributes.horizontalAngle = true;
+    this.supportedAttributes.rotationHorizontalAngle = true;
+    this.supportedAttributes.supportedHorizontalAngles = [30, 60, 90, 120, 150];
+    this.supportedAttributes.verticalAngle = true;
+    this.supportedAttributes.rotationVerticalAngle = true;
+    this.supportedAttributes.supportedVerticalAngles = [30, 60, 90];
+    this.supportedAttributes.speedLevels = 4;
+    this.supportedAttributes.naturalSpeed = true;
+    this.supportedAttributes.sleepMode = true;
+    this.supportedAttributes.smartMode = true;
+    this.supportedAttributes.led = true;
+    this.supportedAttributes.speedIncreaseDecreaseButtons = true;
     this.isConfigureAsyncFinished = true;
   }
 
@@ -497,9 +434,11 @@ export class FanXiaomiCard extends LitElement {
 
     const speed_percentage = this.getSpeedPercentage();
     const child_lock = this.getChildLock();
-    const oscillating = this.getOscillation();
+    const horizontalOscillating = this.getHorizontalOscillation();
+    const verticalOscillating = this.getVerticalOscillation();
     const delay_off_countdown = this.getTimer();
-    const angle = this.getAngle();
+    const horizontalAngle = this.getHorizontalAngle();
+    const verticalAngle = this.getVerticalAngle();
     const preset_mode = this.getPresetMode();
     const model = this.getModel();
     const led = this.getLed();
@@ -522,7 +461,7 @@ export class FanXiaomiCard extends LitElement {
                   <ha-icon icon="mdi:power-plug-${power_supply ? "" : "off-"}outline"></ha-icon>
                 </div>`
               : ""}
-            <div class="fanbox ${state.state === "on" ? "active" : ""} ${oscillating ? "oscillation" : ""}">
+            <div class="fanbox ${state.state === "on" ? "active" : ""} ${horizontalOscillating ? "oscillation" : ""}">
               <div class="blades level${state.state === "on" ? Math.max(1, speedLevel) : 0}">
                 <div class="b1 ang1"></div>
                 <div class="b2 ang25"></div>
@@ -536,7 +475,7 @@ export class FanXiaomiCard extends LitElement {
                 </span>
               </div>
               <div class="c1" @click=${this.toggleOnOff}></div>
-              ${this.supportedAttributes.rotationAngle
+              ${this.supportedAttributes.rotationHorizontalAngle
                 ? html`<div class="chevron left" @click=${this.rotateLeft}>
                       <span class="icon-waper">
                         <ha-icon icon="mdi:chevron-left"></ha-icon>
@@ -545,6 +484,19 @@ export class FanXiaomiCard extends LitElement {
                     <div class="chevron right" @click=${this.rotateRight}>
                       <span class="icon-waper">
                         <ha-icon icon="mdi:chevron-right"></ha-icon>
+                      </span>
+                    </div>`
+                : ""}
+              ${this.supportedAttributes.rotationVerticalAngle
+                ? html`
+                    <div class="chevron up" @click=${this.rotateUp}>
+                      <span class="icon-waper">
+                        <ha-icon icon="mdi:chevron-up"></ha-icon>
+                      </span>
+                    </div>
+                    <div class="chevron down" @click=${this.rotateDown}>
+                      <span class="icon-waper">
+                        <ha-icon icon="mdi:chevron-down"></ha-icon>
                       </span>
                     </div>`
                 : ""}
@@ -557,10 +509,16 @@ export class FanXiaomiCard extends LitElement {
               <p class="attr-value var-childlock">${child_lock ? "On" : "Off"}</p>
             </div>`
           : ""}
-        ${this.supportedAttributes.angle
-          ? html`<div class="attr button-angle" @click=${this.toggleOscillationAngle}>
-              <p class="attr-title">Angle(&deg;)</p>
-              <p class="attr-value var-angle">${angle}</p>
+        ${this.supportedAttributes.horizontalAngle
+          ? html`<div class="attr button-angle" @click=${this.toggleHorizontalOscillationAngle}>
+              <p class="attr-title">Horizontal Angle(&deg;)</p>
+              <p class="attr-value var-angle">${horizontalAngle}</p>
+            </div>`
+          : ""}
+        ${this.supportedAttributes.verticalAngle
+          ? html`<div class="attr button-angle" @click=${this.toggleVerticalOscillationAngle}>
+              <p class="attr-title">Vertical Angle(&deg;)</p>
+              <p class="attr-value var-angle">${verticalAngle}</p>
             </div>`
           : ""}
         ${delay_off_countdown !== undefined
@@ -600,7 +558,7 @@ export class FanXiaomiCard extends LitElement {
                   Speed
                 </button>
               </div>
-              <div class="op var-oscillating ${oscillating ? "active" : ""}" @click=${this.toggleOscillation}>
+              <div class="op var-oscillating ${horizontalOscillating ? "active" : ""}" @click=${this.toggleOscillation}>
                 <button>
                   <span class="icon-waper">
                     <ha-icon icon="mdi:debug-step-over"></ha-icon>
@@ -631,6 +589,16 @@ export class FanXiaomiCard extends LitElement {
               </button>
             </div>`
           : ""}
+        ${this.supportedAttributes.smartMode
+          ? html`<div class="op var-sleep ${speed_percentage === 1 ? "active" : ""}" @click=${this.toggleSmartMode}>
+              <button>
+                <span class="icon-waper">
+                  <ha-icon icon="mdi:brain"></ha-icon>
+                </span>
+                Sleep
+              </button>
+            </div>`
+          : ""}
         ${this.supportedAttributes.led && !this.config.hide_led_button
           ? html`<div class="op var-led ${led ? "active" : ""}" @click=${this.toggleLed}>
               <button>
@@ -652,23 +620,36 @@ export class FanXiaomiCard extends LitElement {
   }
 
   private toggleOnOff(): void {
-    this.hass.callService("fan", "toggle", {
+    this.hass.callService("xiaomi_miot", "set_property", {
       entity_id: this.config.entity,
+      field: "dm_service.speed_level",
+      value: !this.hass.states[this.config.entity].attributes["fan.on"]
     });
   }
 
-  private rotateLeft(): void {
-    this.hass.callService("fan", "set_direction", {
+  private setMiotProperty(siid: number, piid: number, value: any): void{
+    this.hass.callService("xiaomi_miot", "set_miot_property", {
       entity_id: this.config.entity,
-      direction: this.config.platform === "default" ? "reverse" : "left",
+      siid: siid,
+      piid: piid,
+      value: value
     });
+  }
+  
+  private rotateLeft(): void {
+    this.setMiotProperty(8,3,1)
   }
 
   private rotateRight(): void {
-    this.hass.callService("fan", "set_direction", {
-      entity_id: this.config.entity,
-      direction: this.config.platform === "default" ? "forward" : "right",
-    });
+    this.setMiotProperty(8,3,2)
+  }
+  
+  private rotateUp(): void {
+    this.setMiotProperty(8,2,1)
+  }
+
+  private rotateDown(): void {
+    this.setMiotProperty(8,2,2)
   }
 
   /**
@@ -693,35 +674,58 @@ export class FanXiaomiCard extends LitElement {
         : currentLevel + 1;
     const newPercentage = (newLevel / this.supportedAttributes.speedLevels) * 100;
 
-    this.hass.callService("fan", "set_percentage", {
+    this.changeSpeed(newPercentage);
+  }
+
+
+  private changeSpeed(value){
+    this.hass.callService("xiaomi_miot", "set_property", {
       entity_id: this.config.entity,
-      percentage: newPercentage,
+      field: "dm_service.speed_level",
+      value: value
     });
   }
 
   private increaseSpeed() {
-    this.hass.callService("fan", "increase_speed", {
-      entity_id: this.config.entity,
-    });
+    let newValue = this.getSpeedPercentage() + 5;
+    if (newValue > 100) {
+      newValue = 100;
+    }
+    this.changeSpeed(newValue);
   }
 
   private decreaseSpeed() {
-    this.hass.callService("fan", "decrease_speed", {
-      entity_id: this.config.entity,
-    });
+    let newValue = this.getSpeedPercentage() - 5;
+    if (newValue <= 0) {
+      newValue = 1;
+    }
+    this.changeSpeed(newValue);
   }
 
-  private toggleOscillationAngle() {
-    const oldAngle = this.getAngle();
+  private toggleHorizontalOscillationAngle() {
+    const oldAngle = this.getHorizontalAngle();
     let newAngle;
-    const curAngleIndex = this.supportedAttributes.supportedAngles.indexOf(oldAngle);
-    if (curAngleIndex >= 0 && curAngleIndex < this.supportedAttributes.supportedAngles.length - 1) {
-      newAngle = this.supportedAttributes.supportedAngles[curAngleIndex + 1];
+    const curAngleIndex = this.supportedAttributes.supportedHorizontalAngles.indexOf(oldAngle);
+    if (curAngleIndex >= 0 && curAngleIndex < this.supportedAttributes.supportedHorizontalAngles.length - 1) {
+      newAngle = this.supportedAttributes.supportedHorizontalAngles[curAngleIndex + 1];
     } else {
-      newAngle = this.supportedAttributes.supportedAngles[0];
+      newAngle = this.supportedAttributes.supportedHorizontalAngles[0];
     }
 
-    this.setAngle(newAngle);
+    this.setHorizontalAngle(newAngle);
+  }
+
+  private toggleVerticalOscillationAngle() {
+    const oldAngle = this.getVerticalAngle();
+    let newAngle;
+    const curAngleIndex = this.supportedAttributes.supportedVerticalAngles.indexOf(oldAngle);
+    if (curAngleIndex >= 0 && curAngleIndex < this.supportedAttributes.supportedVerticalAngles.length - 1) {
+      newAngle = this.supportedAttributes.supportedVerticalAngles[curAngleIndex + 1];
+    } else {
+      newAngle = this.supportedAttributes.supportedVerticalAngles[0];
+    }
+
+    this.setVerticalAngle(newAngle);
   }
 
   private toggleTimer() {
@@ -737,22 +741,18 @@ export class FanXiaomiCard extends LitElement {
   }
 
   private toggleNatureMode() {
-    const currentlyEnabled = this.getPresetMode() === "nature";
-    this.setPresetMode(currentlyEnabled ? "Normal" : "Nature");
+    const currentlyEnabled = this.getPresetMode() === "Straight Wind";
+    this.setPresetMode(currentlyEnabled ? "Straight Wind" : "Natural Wind");
   }
 
   private toggleSleepMode() {
-    if (this.getSpeedPercentage() === 1) {
-      this.hass.callService("fan", "set_speed", {
-        entity_id: this.config.entity,
-        speed: "low",
-      });
-    } else {
-      this.hass.callService("fan", "set_percentage", {
-        entity_id: this.config.entity,
-        percentage: 1,
-      });
-    }
+    const currentlyEnabled = this.getPresetMode() === "Sleep";
+    this.setPresetMode(currentlyEnabled ? "Straight Wind" : "Sleep");
+  }
+
+  private toggleSmartMode() {
+    const currentlyEnabled = this.getPresetMode() === "Smart";
+    this.setPresetMode(currentlyEnabled ? "Straight Wind" : "Smart");
   }
 
   private toggleLed() {
@@ -761,8 +761,8 @@ export class FanXiaomiCard extends LitElement {
   }
 
   private toggleOscillation() {
-    const currentlyOscillating = this.getOscillation();
-    this.setOscillation(!currentlyOscillating);
+    const currentlyOscillating = this.getHorizontalOscillation();
+    this.setHorizontalOscillation(!currentlyOscillating);
   }
 
   // https://lit.dev/docs/components/styles/

@@ -1,6 +1,6 @@
 import { LovelaceCardConfig } from "custom-card-helpers";
 
-export const platforms = ["default", "xiaomi_miio_fan"] as const;
+export const platforms = ["xiaomi_miio_fan"] as const;
 
 interface FanXiaomiCustomConfig {
   name: string;
