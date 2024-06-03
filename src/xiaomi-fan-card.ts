@@ -98,7 +98,7 @@ function createFanBladeHtml(): HTMLTemplateResult[] {
   return result;
 }
 
-function delayOffCountdownText(delay_off_countdown: number, model: string): string {
+function delayOffCountdownText(delay_off_countdown: number): string {
   let timer_display = "Off";
   if (delay_off_countdown) {
     const total_mins = delay_off_countdown;
@@ -150,6 +150,10 @@ export class FanXiaomiCard extends LitElement {
     sleepMode: false,
     led: false,
     speedIncreaseDecreaseButtons: false,
+    verticalAngle: false,
+    rotationVerticalAngle: false,
+    supportedVerticalAngles: [],
+    smartMode: false
   };
 
   @state() private config!: FanXiaomiCardConfig;
@@ -524,7 +528,7 @@ export class FanXiaomiCard extends LitElement {
         ${delay_off_countdown !== undefined
           ? html`<div class="attr button-timer" @click=${this.toggleTimer}>
               <p class="attr-title">Timer</p>
-              <p class="attr-value var-timer">${delayOffCountdownText(delay_off_countdown, model)}</p>
+              <p class="attr-value var-timer">${delayOffCountdownText(delay_off_countdown)}</p>
             </div>`
           : ""}
       </div>
@@ -568,7 +572,7 @@ export class FanXiaomiCard extends LitElement {
               </div>`}
         ${this.supportedAttributes.naturalSpeed
           ? html`<div
-              class="op var-natural ${preset_mode === "nature" ? "active" : ""}"
+              class="op var-natural ${preset_mode === "Natural Wind" ? "active" : ""}"
               @click=${this.toggleNatureMode}
             >
               <button>
